@@ -1,0 +1,13 @@
+filename,x_center,y_center,width,height,class_idx
+bicycles.jpg,0.5,0.5,0.4,0.3,1
+bike1.jpg,0.5,0.5,0.7,0.5,1
+bike2.jpg,0.45,0.55,0.35,0.25,1
+bike3.jpg,0.60,0.40,0.30,0.20,1
+bike4.jpg,0.60,0.40,0.30,0.20,1
+street1.jpg,0.0,0.0,0.0,0.0,0
+park1.jpg,0.0,0.0,0.0,0.0,0
+person1.jpg,0.0,0.0,0.0,0.0,0
+person2.jpg,0.0,0.0,0.0,0.0
+person3.jpg,0.0,0.0,0.0,0.0,0
+person4.jpg,0.0,0.0,0.0,0.0
+

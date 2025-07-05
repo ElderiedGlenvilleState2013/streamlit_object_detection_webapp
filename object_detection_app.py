@@ -1,59 +1,64 @@
+### this code is using fast cnn pre-trained model
 import streamlit as st
-from PIL import Image
-import numpy as np
-import matplotlib.pyplot as plt
-
+from PIL import Image, ImageDraw, ImageFont
 import torch
-from torchvision.models.detection import fasterrcnn_resnet50_fpn_v2, FasterRCNN_ResNet50_FPN_V2_Weights
-from torchvision.utils import draw_bounding_boxes
+from torchvision.models.detection import (
+    fasterrcnn_resnet50_fpn_v2,
+    FasterRCNN_ResNet50_FPN_V2_Weights
+)
+from torchvision import transforms
 
-weights = FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT
-categories = weights.meta["categories"] ## ['__background__', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'N/A', 'stopsign',]
-img_preprocess = weights.transforms() ## Scales values from 0-255 range to 0-1 range.
-
+# 1) Load a pretrained detector once
 @st.cache_resource
-def load_model():
-    model = fasterrcnn_resnet50_fpn_v2(weights=weights, box_score_thresh=0.5)
-    model.eval(); ## Setting Model for Evaluation/Prediction   
-    return model
+def load_detector():
+    weights  = FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT
+    model    = fasterrcnn_resnet50_fpn_v2(weights=weights, box_score_thresh=0.3)
+    model.eval()
+    return model, weights.meta["categories"]
 
-model = load_model()
+detector, categories = load_detector()
 
-def make_prediction(img): 
-    img_processed = img_preprocess(img) ## (3,500,500) 
-    prediction = model(img_processed.unsqueeze(0)) # (1,3,500,500)
-    prediction = prediction[0]                       ## Dictionary with keys "boxes", "labels", "scores".
-    prediction["labels"] = [categories[label] for label in prediction["labels"]]
-    return prediction
+# 2) Title + uploader
+st.title("🚲 Bicycle-Only Detector")
+upload = st.file_uploader("Upload an image", type=["png","jpg","jpeg"])
+if not upload:
+    st.info("Please upload an image.")
+    st.stop()
 
-def create_image_with_bboxes(img, prediction): ## Adds Bounding Boxes around original Image.
-    img_tensor = torch.tensor(img) ## Transpose
-    img_with_bboxes = draw_bounding_boxes(img_tensor, boxes=prediction["boxes"], labels=prediction["labels"],
-                                          colors=["red" if label=="person" else "green" for label in prediction["labels"]] , width=2)
-    img_with_bboxes_np = img_with_bboxes.detach().numpy().transpose(1,2,0) ### (3,W,H) -> (W,H,3), Channel first to channel last.
-    return img_with_bboxes_np
+# 3) Open + preprocess
+img = Image.open(upload).convert("RGB")
+transform = FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT.transforms()
+img_t = transform(img).unsqueeze(0)  # (1,3,H,W)
 
-## Dashboard
-st.title("Object Detector :tea: :coffee:")
-upload = st.file_uploader(label="Upload Image Here:", type=["png", "jpg", "jpeg"])
+# 4) Run detection
+with torch.no_grad():
+    preds = detector(img_t)[0]
 
-if upload:
-    img = Image.open(upload)
+# 5) Filter for bicycles
+bike_indices = [
+    i for i, lab in enumerate(preds["labels"])
+    if categories[lab] == "bicycle"
+]
 
-    prediction = make_prediction(img) ## Dictionary
-    img_with_bbox = create_image_with_bboxes(np.array(img).transpose(2,0,1), prediction) ## (W,H,3) -> (3,W,H)
+# 6) Draw them
+img_out = img.copy()
+draw   = ImageDraw.Draw(img_out)
+font   = ImageFont.load_default()
 
-    fig = plt.figure(figsize=(12,12))
-    ax = fig.add_subplot(111)
-    plt.imshow(img_with_bbox)
-    plt.xticks([],[])
-    plt.yticks([],[])
-    ax.spines[["top", "bottom", "right", "left"]].set_visible(False)
+if not bike_indices:
+    st.warning("No bicycle detected with confidence ≥ threshold.")
+else:
+    for i in bike_indices:
+        x0, y0, x1, y1 = preds["boxes"][i].round().tolist()
+        score = preds["scores"][i].item()
+        draw.rectangle([x0, y0, x1, y1], outline="red", width=3)
+        draw.text((x0, y0 - 10),
+                  f"bike {score:.2f}",
+                  font=font,
+                  fill="red")
 
-    st.pyplot(fig, use_container_width=True)
+# 7) Display
+st.image(img_out, use_container_width=True)
 
-    del prediction["boxes"]
-    st.header("Predicted Probabilities")
-    st.write(prediction)
 
 
